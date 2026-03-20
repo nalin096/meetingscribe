@@ -2,6 +2,8 @@ import os
 import tempfile
 from pathlib import Path
 import pytest
+import numpy as np
+import soundfile as sf
 
 
 @pytest.fixture
@@ -65,3 +67,15 @@ level = "INFO"
     # Also create the prompt file
     (tmp_home / ".meetingscribe" / "prompt.md").write_text("Summarize this meeting.")
     return config_path
+
+
+@pytest.fixture
+def make_wav(tmp_path):
+    """Factory fixture: create a WAV file with sine tone."""
+    def _make(filename: str, duration_s: float = 5.0, sample_rate: int = 16000):
+        path = tmp_path / filename
+        t = np.linspace(0, duration_s, int(sample_rate * duration_s), endpoint=False)
+        audio = (np.sin(2 * np.pi * 440 * t) * 0.5).astype(np.float32)
+        sf.write(str(path), audio, sample_rate, subtype="PCM_16")
+        return path
+    return _make
