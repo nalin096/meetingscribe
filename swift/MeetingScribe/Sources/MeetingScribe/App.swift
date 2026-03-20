@@ -33,51 +33,44 @@ class AppState: ObservableObject {
 
     init() {
         CrashRecovery.recoverIfNeeded(in: Constants.recordingsDir)
+        // Start monitoring immediately on init — don't wait for onAppear
+        startMonitoring()
     }
 
     func startMonitoring() {
-        Task {
-            let status = await PermissionManager.check()
-            if !status.screenRecording || !status.microphone || !status.accessibility {
-                PermissionManager.requestMissing(status)
-                statusMessage = "Permissions required — check System Settings"
-                return
-            }
+        let config = (try? AppConfig.load()) ?? AppConfig(
+            apps: [], chromeWindowMatch: "Meet -|meet.google.com", slackMinDurationSeconds: 30,
+            pollIntervalSeconds: 3, sampleRate: 16000, channels: 1,
+            bitDepth: 16, chunkDurationSeconds: 300, chunkOverlapSeconds: 1
+        )
 
-            systemEvents = SystemEvents()
-            systemEvents?.onSleep = { [weak self] in
-                Task { @MainActor in
-                    if self?.isRecording == true {
-                        self?.stopRecording()
-                    }
+        systemEvents = SystemEvents()
+        systemEvents?.onSleep = { [weak self] in
+            Task { @MainActor in
+                if self?.isRecording == true {
+                    self?.stopRecording()
                 }
             }
-            systemEvents?.onAudioDeviceChange = { [weak self] in
-                Task { @MainActor in
-                    if self?.isRecording == true {
-                        self?.statusMessage = "Audio device changed — still recording"
-                    }
-                }
-            }
-
-            let config = (try? AppConfig.load()) ?? AppConfig(
-                apps: [], chromeWindowMatch: "Meet -|meet.google.com", slackMinDurationSeconds: 30,
-                pollIntervalSeconds: 3, sampleRate: 16000, channels: 1,
-                bitDepth: 16, chunkDurationSeconds: 300, chunkOverlapSeconds: 1
-            )
-
-            detectionManager = DetectionManager(
-                config: config,
-                onMeetingDetected: { [weak self] app in
-                    self?.handleMeetingDetected(app: app, config: config)
-                },
-                onMeetingEnded: { [weak self] in
-                    self?.handleMeetingEnded()
-                }
-            )
-            detectionManager?.start()
-            statusMessage = "Watching for meetings..."
         }
+        systemEvents?.onAudioDeviceChange = { [weak self] in
+            Task { @MainActor in
+                if self?.isRecording == true {
+                    self?.statusMessage = "Audio device changed — still recording"
+                }
+            }
+        }
+
+        detectionManager = DetectionManager(
+            config: config,
+            onMeetingDetected: { [weak self] app in
+                self?.handleMeetingDetected(app: app, config: config)
+            },
+            onMeetingEnded: { [weak self] in
+                self?.handleMeetingEnded()
+            }
+        )
+        detectionManager?.start()
+        statusMessage = "Watching for meetings..."
     }
 
     private func handleMeetingDetected(app: String, config: AppConfig) {

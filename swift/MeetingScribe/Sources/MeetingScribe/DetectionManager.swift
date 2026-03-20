@@ -37,25 +37,48 @@ class DetectionManager {
         timer = nil
     }
 
-    private func poll() async {
-        guard let content = try? await SCShareableContent.current else { return }
-        let runningApps = content.applications
-
-        if isRecording {
-            if let detector = activeDetector, !detector.isActive(apps: runningApps) {
-                isRecording = false
-                activeDetector = nil
-                await MainActor.run { onMeetingEnded() }
-            }
-            return
+    private func log(_ message: String) {
+        let logFile = Constants.meetingScribeDir.appendingPathComponent("debug.log")
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] \(message)\n"
+        if let handle = try? FileHandle(forWritingTo: logFile) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            try? line.write(to: logFile, atomically: true, encoding: .utf8)
         }
+    }
 
-        for detector in detectors {
-            if detector.isActive(apps: runningApps) {
-                isRecording = true
-                activeDetector = detector
-                await MainActor.run { onMeetingDetected(detector.appName) }
+    private func poll() async {
+        do {
+            let content = try await SCShareableContent.current
+            let runningApps = content.applications
+
+            if isRecording {
+                if let detector = activeDetector, !detector.isActive(apps: runningApps) {
+                    isRecording = false
+                    activeDetector = nil
+                    log("Meeting ended")
+                    await MainActor.run { onMeetingEnded() }
+                }
                 return
+            }
+
+            for detector in detectors {
+                if detector.isActive(apps: runningApps) {
+                    isRecording = true
+                    activeDetector = detector
+                    log("Meeting detected: \(detector.appName)")
+                    await MainActor.run { onMeetingDetected(detector.appName) }
+                    return
+                }
+            }
+        } catch {
+            log("SCShareableContent FAILED: \(error)")
+            // Update status message on main thread
+            await MainActor.run {
+                // Fallback: try detection without SCK
             }
         }
     }
