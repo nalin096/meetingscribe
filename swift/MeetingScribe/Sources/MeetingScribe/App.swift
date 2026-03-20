@@ -102,11 +102,14 @@ class AppState: ObservableObject {
                 let content = try await SCShareableContent.current
                 if let scApp = content.applications.first(where: { $0.bundleIdentifier == bundleID }) {
                     try await audioCapture?.start(for: scApp, content: content)
+                    debugLog("Audio capture started for \(bundleID)")
                 } else {
-                    debugLog("App '\(bundleID)' not found in SCShareableContent — no audio capture")
+                    debugLog("App '\(bundleID)' not found in SCShareableContent — starting mic-only capture")
+                    // Start mic-only capture by passing a dummy app
+                    try await audioCapture?.start(for: content.applications.first!, content: content)
                 }
             } catch {
-                debugLog("Audio capture failed: \(error)")
+                debugLog("Audio capture setup error (non-fatal): \(error)")
             }
         }
 

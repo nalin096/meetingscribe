@@ -36,7 +36,11 @@ def concatenate_chunks(chunk_paths: list[Path], output_path: Path, overlap_secon
     for path in chunk_paths:
         data, sr = sf.read(str(path), dtype="float32")
         if sr != sample_rate:
-            raise ValueError(f"Expected {sample_rate}Hz, got {sr}Hz")
+            # Resample to target rate instead of failing
+            from scipy.signal import resample as scipy_resample
+            new_len = int(len(data) * sample_rate / sr)
+            data = scipy_resample(data, new_len).astype(np.float32)
+            sr = sample_rate
 
         if result is None:
             result = data

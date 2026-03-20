@@ -20,7 +20,7 @@ def _get_pipeline(hf_token: str) -> Pipeline:
     if _pipeline_cache is None:
         _pipeline_cache = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1",
-            use_auth_token=hf_token,
+            token=hf_token,
         )
     return _pipeline_cache
 
@@ -29,7 +29,7 @@ def diarize(audio_path: str | Path, hf_token: str) -> list[SpeakerSegment]:
     """Run speaker diarization on audio file."""
     pipeline = Pipeline.from_pretrained(
         "pyannote/speaker-diarization-3.1",
-        use_auth_token=hf_token,
+        token=hf_token,
     )
     diarization = pipeline(str(audio_path))
     segments = []

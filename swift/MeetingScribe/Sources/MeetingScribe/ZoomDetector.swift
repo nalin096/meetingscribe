@@ -5,8 +5,11 @@ struct ZoomDetector: MeetingDetector {
     let appName = "Zoom"
 
     func isActive(apps: [SCRunningApplication]) -> Bool {
-        let zoomRunning = apps.contains { $0.bundleIdentifier == "zoom.us" }
-        guard zoomRunning else { return false }
+        // If SCK apps available, check there first. Otherwise fall through to pgrep.
+        if !apps.isEmpty {
+            let zoomRunning = apps.contains { $0.bundleIdentifier == "zoom.us" }
+            guard zoomRunning else { return false }
+        }
 
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")

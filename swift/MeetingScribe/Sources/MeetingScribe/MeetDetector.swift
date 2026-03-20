@@ -7,8 +7,11 @@ struct MeetDetector: MeetingDetector {
     let windowMatch: String
 
     func isActive(apps: [SCRunningApplication]) -> Bool {
-        let chromeRunning = apps.contains { $0.bundleIdentifier == "com.google.Chrome" }
-        guard chromeRunning else { return false }
+        // If SCK apps available, check Chrome is running. Otherwise skip (CGWindowList will confirm).
+        if !apps.isEmpty {
+            let chromeRunning = apps.contains { $0.bundleIdentifier == "com.google.Chrome" }
+            guard chromeRunning else { return false }
+        }
 
         guard let windowList = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else {
             return false

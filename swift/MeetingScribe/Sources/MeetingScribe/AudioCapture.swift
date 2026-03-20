@@ -21,45 +21,82 @@ class AudioCapture {
         )
         chunkWriter?.start()
 
-        // Setup SCStream for remote audio — capture all windows from the target app
-        let appWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == app.bundleIdentifier }
-        guard let display = content.displays.first else {
-            throw CaptureError.noDisplay
+        // Setup SCStream for remote audio
+        do {
+            let appWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == app.bundleIdentifier }
+            guard let display = content.displays.first else {
+                log("No display found — skipping remote audio capture")
+                throw CaptureError.noDisplay
+            }
+
+            guard !appWindows.isEmpty else {
+                log("No windows found for \(app.bundleIdentifier) — skipping remote capture")
+                throw CaptureError.appNotFound
+            }
+
+            let filter = SCContentFilter(display: display, including: appWindows)
+            let streamConfig = SCStreamConfiguration()
+            streamConfig.capturesAudio = true
+            streamConfig.sampleRate = config.sampleRate
+            streamConfig.channelCount = config.channels
+
+            let delegate = AudioStreamDelegate(chunkWriter: chunkWriter!)
+            scStream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
+            try scStream?.addStreamOutput(delegate, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
+            try await scStream?.startCapture()
+            log("SCStream remote capture started")
+        } catch {
+            log("SCStream setup failed (continuing with mic only): \(error)")
+            // Don't rethrow — still capture local mic
         }
-
-        let filter = SCContentFilter(display: display, including: appWindows)
-        let streamConfig = SCStreamConfiguration()
-        streamConfig.capturesAudio = true
-        streamConfig.sampleRate = config.sampleRate
-        streamConfig.channelCount = config.channels
-
-        let delegate = AudioStreamDelegate(chunkWriter: chunkWriter!)
-        scStream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
-        try scStream?.addStreamOutput(delegate, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
-        try await scStream?.startCapture()
 
         // Setup AVAudioEngine for local mic
-        audioEngine = AVAudioEngine()
-        let inputNode = audioEngine!.inputNode
-        let format = AVAudioFormat(standardFormatWithSampleRate: Double(config.sampleRate), channels: 1)!
+        do {
+            audioEngine = AVAudioEngine()
+            let inputNode = audioEngine!.inputNode
+            // Use the input node's native format instead of forcing 16kHz
+            let nativeFormat = inputNode.outputFormat(forBus: 0)
+            log("Mic native format: \(nativeFormat.sampleRate)Hz, \(nativeFormat.channelCount)ch")
+            chunkWriter?.localSampleRate = nativeFormat.sampleRate
 
-        inputNode.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, time in
-            let machTime = mach_absolute_time()
-            self?.chunkWriter?.writeLocal(buffer: buffer, machTime: machTime)
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nativeFormat) { [weak self] buffer, time in
+                let machTime = mach_absolute_time()
+                self?.chunkWriter?.writeLocal(buffer: buffer, machTime: machTime)
+            }
+
+            try audioEngine?.start()
+            log("AVAudioEngine mic capture started")
+        } catch {
+            log("AVAudioEngine failed: \(error)")
         }
-
-        try audioEngine?.start()
     }
 
     func stop() -> [ChunkWriter.ChunkInfo] {
-        scStream?.stopCapture { _ in }
+        if let stream = scStream {
+            stream.stopCapture { _ in }
+        }
         scStream = nil
 
-        audioEngine?.inputNode.removeTap(onBus: 0)
-        audioEngine?.stop()
+        if audioEngine?.isRunning == true {
+            audioEngine?.inputNode.removeTap(onBus: 0)
+            audioEngine?.stop()
+        }
         audioEngine = nil
 
         return chunkWriter?.finalize() ?? []
+    }
+
+    private func log(_ message: String) {
+        let logFile = Constants.meetingScribeDir.appendingPathComponent("debug.log")
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[AUDIO \(timestamp)] \(message)\n"
+        if let handle = try? FileHandle(forWritingTo: logFile) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            try? line.write(to: logFile, atomically: true, encoding: .utf8)
+        }
     }
 
     enum CaptureError: Error {

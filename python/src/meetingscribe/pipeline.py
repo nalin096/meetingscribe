@@ -35,22 +35,32 @@ def process_meeting(manifest: Manifest, recordings_dir: Path, config: MeetingScr
     """Run full pipeline: merge → transcribe → diarize → align → summarize → write."""
     logger.info(f"Processing meeting {manifest.meeting_id}")
 
-    # Step 1: Merge audio chunks
+    # Step 1: Merge audio chunks (or use local-only if remote is empty)
     merged_chunks = []
+    local_only_chunks = []
     for i, chunk in enumerate(manifest.chunks):
         remote_path = recordings_dir / chunk.remote
         local_path = recordings_dir / chunk.local
         merged_path = recordings_dir / f"merged_{i:03d}.wav"
-        if remote_path.exists() and local_path.exists():
+
+        remote_has_audio = remote_path.exists() and remote_path.stat().st_size > 100
+        local_has_audio = local_path.exists() and local_path.stat().st_size > 100
+
+        if remote_has_audio and local_has_audio:
             merge_chunk_pair(remote_path, local_path, merged_path, drift_ms=0)
             merged_chunks.append(merged_path)
+        elif local_has_audio:
+            # Remote is empty/header-only — use local mic audio directly
+            logger.info(f"Remote audio empty for chunk {i}, using local mic only")
+            local_only_chunks.append(local_path)
 
+    all_chunks = merged_chunks or local_only_chunks
     full_audio = recordings_dir / f"{manifest.meeting_id}_full.wav"
-    if merged_chunks:
-        concatenate_chunks(merged_chunks, full_audio, overlap_seconds=config.audio.chunk_overlap_seconds, sample_rate=config.audio.sample_rate)
+    if all_chunks:
+        concatenate_chunks(all_chunks, full_audio, overlap_seconds=config.audio.chunk_overlap_seconds, sample_rate=config.audio.sample_rate)
 
     # Step 2: Transcribe
-    audio_file = full_audio if full_audio.exists() else None
+    audio_file = full_audio if full_audio.exists() and full_audio.stat().st_size > 100 else None
     segments = []
     if audio_file:
         segments = transcribe(str(audio_file), model_size=config.transcription.model)

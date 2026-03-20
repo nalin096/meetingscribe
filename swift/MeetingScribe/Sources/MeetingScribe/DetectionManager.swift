@@ -50,7 +50,15 @@ class DetectionManager {
         }
     }
 
+    private var sckPermissionDenied = false
+
     private func poll() async {
+        // If SCK permission was denied, use CGWindowList-only detection (no prompt spam)
+        if sckPermissionDenied {
+            pollWithoutSCK()
+            return
+        }
+
         do {
             let content = try await SCShareableContent.current
             let runningApps = content.applications
@@ -75,10 +83,31 @@ class DetectionManager {
                 }
             }
         } catch {
-            log("SCShareableContent FAILED: \(error)")
-            // Update status message on main thread
-            await MainActor.run {
-                // Fallback: try detection without SCK
+            log("SCShareableContent FAILED (switching to CGWindowList mode): \(error)")
+            sckPermissionDenied = true
+        }
+    }
+
+    /// Fallback detection using only CGWindowList — no SCK permission needed
+    private func pollWithoutSCK() {
+        if isRecording {
+            // Check if meeting window is still present
+            if let detector = activeDetector, !detector.isActive(apps: []) {
+                isRecording = false
+                activeDetector = nil
+                log("Meeting ended (CGWindowList mode)")
+                Task { await MainActor.run { onMeetingEnded() } }
+            }
+            return
+        }
+
+        for detector in detectors {
+            if detector.isActive(apps: []) {
+                isRecording = true
+                activeDetector = detector
+                log("Meeting detected (CGWindowList mode): \(detector.appName)")
+                Task { await MainActor.run { onMeetingDetected(detector.appName) } }
+                return
             }
         }
     }
