@@ -67,6 +67,20 @@ class ManifestHandler(FileSystemEventHandler):
                 logger.error(f"Error handling new manifest {path}: {e}")
 
 
+def resummarize_pending(vault_path: Path) -> list[Path]:
+    """Scan vault for .md files with status: needs-summary in frontmatter. Returns list of matches."""
+    pending = []
+    for md in vault_path.glob("*.md"):
+        try:
+            content = md.read_text(encoding="utf-8")
+            if "status: needs-summary" in content:
+                pending.append(md)
+                logger.info(f"Found needs-summary note: {md.name}")
+        except OSError as e:
+            logger.warning(f"Could not read {md}: {e}")
+    return pending
+
+
 def run_daemon(config: MeetingScribeConfig) -> None:
     """Start the filesystem watcher daemon."""
     recordings_dir = Path("~/.meetingscribe/recordings").expanduser()
