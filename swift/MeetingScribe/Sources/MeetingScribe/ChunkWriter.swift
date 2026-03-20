@@ -145,6 +145,14 @@ class ChunkWriter {
         let remoteName = String(format: "chunk_%03d_remote.wav", chunkIndex)
         let localName = String(format: "chunk_%03d_local.wav", chunkIndex)
 
+        // Force AVAudioFile to flush WAV headers by releasing references.
+        // AVAudioFile updates the RIFF/data chunk sizes in its deinit.
+        // Use autoreleasepool to guarantee immediate deallocation.
+        autoreleasepool {
+            currentRemoteFile = nil
+            currentLocalFile = nil
+        }
+
         let iso = ISO8601DateFormatter()
         iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
@@ -152,8 +160,6 @@ class ChunkWriter {
             remote: remoteName, local: localName,
             startMachTime: chunkStartMach, startISO: iso.string(from: startTime)
         ))
-        currentRemoteFile = nil
-        currentLocalFile = nil
     }
 
     private func rollChunk() {

@@ -11,8 +11,11 @@ def merge_chunk_pair(remote_path: Path, local_path: Path, output_path: Path, dri
     remote, sr_r = sf.read(str(remote_path), dtype="float32")
     local, sr_l = sf.read(str(local_path), dtype="float32")
 
+    # Resample to match if different sample rates
     if sr_r != sr_l:
-        raise ValueError(f"Sample rate mismatch: {sr_r} vs {sr_l}")
+        if len(local) > 0 and sr_l > 0:
+            new_len = int(len(local) * sr_r / sr_l)
+            local = resample(local, new_len).astype(np.float32)
 
     if abs(drift_ms) > 10 and len(remote) > 0:
         local = resample(local, len(remote)).astype(np.float32)
