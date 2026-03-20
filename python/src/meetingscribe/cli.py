@@ -93,6 +93,41 @@ level = "INFO"
 """
 
 
+def install_command() -> None:
+    """Install LaunchAgent plist and load it."""
+    import shutil
+    from importlib.resources import files
+
+    launch_agents_dir = Path("~/Library/LaunchAgents").expanduser()
+    launch_agents_dir.mkdir(parents=True, exist_ok=True)
+
+    plist_src = Path(__file__).parent.parent.parent / "resources" / "com.meetingscribe.daemon.plist"
+    if not plist_src.exists():
+        # Try importlib resources fallback
+        try:
+            pkg_resources = files("meetingscribe")
+            plist_data = (pkg_resources / "resources" / "com.meetingscribe.daemon.plist").read_text()
+            plist_dest = launch_agents_dir / "com.meetingscribe.daemon.plist"
+            plist_dest.write_text(plist_data)
+        except Exception:
+            print("Error: plist resource not found.")
+            sys.exit(1)
+    else:
+        plist_dest = launch_agents_dir / "com.meetingscribe.daemon.plist"
+        shutil.copy(plist_src, plist_dest)
+
+    result = subprocess.run(
+        ["launchctl", "load", str(plist_dest)],
+        capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        print(f"launchctl load failed: {result.stderr.strip()}")
+        sys.exit(1)
+
+    print(f"LaunchAgent installed: {plist_dest}")
+    print("MeetingScribe daemon will run at login and is now active.")
+
+
 def run_daemon_command() -> None:
     """Start the watcher daemon."""
     from meetingscribe.config import load_config
@@ -124,11 +159,14 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("setup", help="Run first-time setup wizard")
     sub.add_parser("daemon", help="Start the processing daemon")
+    sub.add_parser("install", help="Install LaunchAgent and start daemon at login")
     args = parser.parse_args()
 
     if args.command == "setup":
         setup_command()
     elif args.command == "daemon":
         run_daemon_command()
+    elif args.command == "install":
+        install_command()
     else:
         parser.print_help()
