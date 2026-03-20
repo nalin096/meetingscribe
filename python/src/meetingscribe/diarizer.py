@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from pyannote.audio import Pipeline
 
 
 @dataclass
@@ -12,12 +11,13 @@ class SpeakerSegment:
     speaker: str
 
 
-_pipeline_cache: Pipeline | None = None
+_pipeline_cache = None
 
 
-def _get_pipeline(hf_token: str) -> Pipeline:
+def _get_pipeline(hf_token: str):
     global _pipeline_cache
     if _pipeline_cache is None:
+        from pyannote.audio import Pipeline
         _pipeline_cache = Pipeline.from_pretrained(
             "pyannote/speaker-diarization-3.1",
             token=hf_token,
