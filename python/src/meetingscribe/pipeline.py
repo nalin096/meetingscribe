@@ -78,17 +78,33 @@ def process_meeting(manifest: Manifest, recordings_dir: Path, config: MeetingScr
     if all_chunks:
         concatenate_chunks(all_chunks, full_audio, overlap_seconds=config.audio.chunk_overlap_seconds, sample_rate=config.audio.sample_rate)
 
+    # Normalize audio level — mic capture can be very quiet
+    if full_audio.exists() and full_audio.stat().st_size > 100:
+        import soundfile as _sf
+        import numpy as _np
+        _data, _sr = _sf.read(str(full_audio), dtype="float32")
+        if len(_data) > 0:
+            peak = _np.max(_np.abs(_data))
+            if 0 < peak < 0.8:
+                gain = 0.9 / peak  # normalize to 0.9 peak
+                logger.info(f"Audio quiet (peak={peak:.4f}), boosting {gain:.1f}x")
+                _data = _np.clip(_data * gain, -1.0, 1.0)
+                _sf.write(str(full_audio), _data, _sr, subtype="PCM_16")
+
     # Step 2: Transcribe
     audio_file = full_audio if full_audio.exists() and full_audio.stat().st_size > 100 else None
     segments = []
     if audio_file:
         segments = transcribe(str(audio_file), model_size=config.transcription.model)
 
-    # Step 3: Diarize
+    # Step 3: Diarize (graceful fallback if pyannote fails)
     hf_token = keyring.get_password(config.diarization.keychain_service, config.diarization.keychain_account)
     speaker_segments = []
     if audio_file and hf_token:
-        speaker_segments = diarize(str(audio_file), hf_token=hf_token)
+        try:
+            speaker_segments = diarize(str(audio_file), hf_token=hf_token)
+        except Exception as e:
+            logger.warning(f"Diarization failed (continuing without speaker labels): {e}")
 
     # Step 4: Align
     aligned = align(segments, speaker_segments)
