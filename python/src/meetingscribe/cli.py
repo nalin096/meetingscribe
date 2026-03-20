@@ -160,6 +160,7 @@ def main() -> None:
     sub.add_parser("setup", help="Run first-time setup wizard")
     sub.add_parser("daemon", help="Start the processing daemon")
     sub.add_parser("install", help="Install LaunchAgent and start daemon at login")
+    sub.add_parser("label-speaker", help="Label speakers in meeting notes (v2)")
     args = parser.parse_args()
 
     if args.command == "setup":
@@ -168,5 +169,7 @@ def main() -> None:
         run_daemon_command()
     elif args.command == "install":
         install_command()
+    elif args.command == "label-speaker":
+        print("Speaker labeling will be available in v2.")
     else:
         parser.print_help()
