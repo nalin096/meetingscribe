@@ -1,0 +1,40 @@
+[vault]
+path = "~/ObsidianVault/Meetings"
+timezone = "America/Los_Angeles"
+
+[detection]
+apps = ["zoom.us", "com.google.Chrome", "com.tinyspeck.slackmacgap"]
+chrome_window_match = "Meet -|meet.google.com"
+slack_min_duration_seconds = 30
+poll_interval_seconds = 3
+
+[audio]
+sample_rate = 16000
+channels = 1
+bit_depth = 16
+chunk_duration_seconds = 300
+chunk_overlap_seconds = 1
+
+[transcription]
+model = "large-v3"
+
+[diarization]
+keychain_service = "meetingscribe"
+keychain_account = "hf_token"
+
+[summary]
+cli = "claude"
+model_flag = "--model sonnet"
+prompt_file = "~/.meetingscribe/prompt.md"
+
+[retry]
+max_retries = 3
+backoff_minutes = [1, 5, 30]
+summary_retry_interval_minutes = 15
+
+[storage]
+retain_wav_days = 0
+orphan_cleanup_days = 7
+
+[logging]
+level = "INFO"
