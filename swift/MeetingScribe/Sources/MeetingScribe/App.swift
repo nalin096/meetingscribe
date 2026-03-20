@@ -73,6 +73,13 @@ class AppState: ObservableObject {
         statusMessage = "Watching for meetings..."
     }
 
+    /// Map detector app names to bundle identifiers for audio capture
+    private static let appToBundleID: [String: String] = [
+        "Google Meet": "com.google.Chrome",
+        "Zoom": "zoom.us",
+        "Slack Huddle": "com.tinyspeck.slackmacgap",
+    ]
+
     private func handleMeetingDetected(app: String, config: AppConfig) {
         if isRecording {
             detectedAlternativeApp = app
@@ -88,16 +95,35 @@ class AppState: ObservableObject {
 
         audioCapture = AudioCapture(config: config)
 
+        let bundleID = AppState.appToBundleID[app] ?? app
+
         Task {
-            guard let content = try? await SCShareableContent.current,
-                  let scApp = content.applications.first(where: { $0.bundleIdentifier == app || $0.applicationName.lowercased() == app.lowercased() }) else {
-                // App not found in SC content; still start local capture
-                return
+            do {
+                let content = try await SCShareableContent.current
+                if let scApp = content.applications.first(where: { $0.bundleIdentifier == bundleID }) {
+                    try await audioCapture?.start(for: scApp, content: content)
+                } else {
+                    debugLog("App '\(bundleID)' not found in SCShareableContent — no audio capture")
+                }
+            } catch {
+                debugLog("Audio capture failed: \(error)")
             }
-            try? await audioCapture?.start(for: scApp, content: content)
         }
 
         startRecording(app: app)
+    }
+
+    private func debugLog(_ message: String) {
+        let logFile = Constants.meetingScribeDir.appendingPathComponent("debug.log")
+        let timestamp = ISO8601DateFormatter().string(from: Date())
+        let line = "[\(timestamp)] \(message)\n"
+        if let handle = try? FileHandle(forWritingTo: logFile) {
+            handle.seekToEndOfFile()
+            handle.write(line.data(using: .utf8)!)
+            handle.closeFile()
+        } else {
+            try? line.write(to: logFile, atomically: true, encoding: .utf8)
+        }
     }
 
     private func handleMeetingEnded() {
