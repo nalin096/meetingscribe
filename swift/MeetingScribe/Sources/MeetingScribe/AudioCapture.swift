@@ -54,12 +54,17 @@ class AudioCapture {
         do {
             audioEngine = AVAudioEngine()
             let inputNode = audioEngine!.inputNode
-            // Use the input node's native format instead of forcing 16kHz
-            let nativeFormat = inputNode.outputFormat(forBus: 0)
-            log("Mic native format: \(nativeFormat.sampleRate)Hz, \(nativeFormat.channelCount)ch")
-            chunkWriter?.localSampleRate = nativeFormat.sampleRate
+            let hwFormat = inputNode.inputFormat(forBus: 0)
+            log("Mic hardware format: \(hwFormat.sampleRate)Hz, \(hwFormat.channelCount)ch, \(hwFormat.commonFormat.rawValue)")
 
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: nativeFormat) { [weak self] buffer, time in
+            // Use a standard recording format — 48kHz mono Float32
+            let recordFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
+            chunkWriter?.localSampleRate = 48000
+            log("Recording format: \(recordFormat.sampleRate)Hz, \(recordFormat.channelCount)ch")
+
+            // Pass nil as format to get the native hardware format in the tap,
+            // then convert to our recording format
+            inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordFormat) { [weak self] buffer, time in
                 let machTime = mach_absolute_time()
                 self?.chunkWriter?.writeLocal(buffer: buffer, machTime: machTime)
             }

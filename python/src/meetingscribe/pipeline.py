@@ -6,7 +6,7 @@ from pathlib import Path
 
 import keyring
 
-from meetingscribe.audio_merger import merge_chunk_pair, concatenate_chunks
+from meetingscribe.audio_merger import merge_chunk_pair, concatenate_chunks, fix_wav_header
 from meetingscribe.transcriber import transcribe
 from meetingscribe.diarizer import diarize
 from meetingscribe.aligner import align
@@ -35,7 +35,8 @@ def process_meeting(manifest: Manifest, recordings_dir: Path, config: MeetingScr
     """Run full pipeline: merge → transcribe → diarize → align → summarize → write."""
     logger.info(f"Processing meeting {manifest.meeting_id}")
 
-    # Step 1: Merge audio chunks (or use local-only if remote is empty)
+    # Step 1: Fix WAV headers (AVAudioFile may not update sizes on close)
+    # then merge audio chunks (or use local-only if remote is empty)
     merged_chunks = []
     local_only_chunks = []
     for i, chunk in enumerate(manifest.chunks):
@@ -43,16 +44,34 @@ def process_meeting(manifest: Manifest, recordings_dir: Path, config: MeetingScr
         local_path = recordings_dir / chunk.local
         merged_path = recordings_dir / f"merged_{i:03d}.wav"
 
-        remote_has_audio = remote_path.exists() and remote_path.stat().st_size > 100
-        local_has_audio = local_path.exists() and local_path.stat().st_size > 100
+        # Fix WAV headers before reading
+        if remote_path.exists():
+            fix_wav_header(remote_path)
+        if local_path.exists():
+            fix_wav_header(local_path)
 
-        if remote_has_audio and local_has_audio:
+        # Check actual sample count, not file size
+        import soundfile as sf
+        remote_samples = 0
+        local_samples = 0
+        if remote_path.exists():
+            info = sf.info(str(remote_path))
+            remote_samples = info.frames
+        if local_path.exists():
+            info = sf.info(str(local_path))
+            local_samples = info.frames
+
+        logger.info(f"Chunk {i}: remote={remote_samples} samples, local={local_samples} samples")
+
+        if remote_samples > 0 and local_samples > 0:
             merge_chunk_pair(remote_path, local_path, merged_path, drift_ms=0)
             merged_chunks.append(merged_path)
-        elif local_has_audio:
-            # Remote is empty/header-only — use local mic audio directly
+        elif local_samples > 0:
             logger.info(f"Remote audio empty for chunk {i}, using local mic only")
             local_only_chunks.append(local_path)
+        elif remote_samples > 0:
+            logger.info(f"Local audio empty for chunk {i}, using remote only")
+            merged_chunks.append(remote_path)
 
     all_chunks = merged_chunks or local_only_chunks
     full_audio = recordings_dir / f"{manifest.meeting_id}_full.wav"

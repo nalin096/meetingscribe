@@ -1,9 +1,40 @@
 """Merge dual audio streams and concatenate chunks with cross-fade."""
 
+import struct
 from pathlib import Path
 import numpy as np
 import soundfile as sf
 from scipy.signal import resample
+
+
+def fix_wav_header(path: Path) -> None:
+    """Fix WAV files where the RIFF/data sizes weren't updated (AVAudioFile bug).
+    Reads actual file size and rewrites the header sizes."""
+    size = path.stat().st_size
+    if size < 44:
+        return
+    with open(path, "r+b") as f:
+        # Read format info
+        f.seek(0)
+        riff = f.read(4)
+        if riff != b"RIFF":
+            return
+        # Fix RIFF chunk size = file_size - 8
+        f.seek(4)
+        f.write(struct.pack("<I", size - 8))
+        # Find data chunk and fix its size
+        f.seek(12)  # skip RIFF header
+        while f.tell() < size:
+            chunk_id = f.read(4)
+            if len(chunk_id) < 4:
+                break
+            chunk_size = struct.unpack("<I", f.read(4))[0]
+            if chunk_id == b"data":
+                actual_data_size = size - f.tell()
+                f.seek(-4, 1)
+                f.write(struct.pack("<I", actual_data_size))
+                break
+            f.seek(chunk_size, 1)
 
 
 def merge_chunk_pair(remote_path: Path, local_path: Path, output_path: Path, drift_ms: float = 0) -> None:
