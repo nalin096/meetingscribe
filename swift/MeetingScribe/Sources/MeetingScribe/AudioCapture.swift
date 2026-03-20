@@ -7,6 +7,7 @@ class AudioCapture {
     private var audioEngine: AVAudioEngine?
     private var chunkWriter: ChunkWriter?
     private let config: AppConfig
+    private var scAudioDelegate: AudioStreamDelegate?
 
     init(config: AppConfig) {
         self.config = config
@@ -37,12 +38,13 @@ class AudioCapture {
             let filter = SCContentFilter(display: display, including: appWindows)
             let streamConfig = SCStreamConfiguration()
             streamConfig.capturesAudio = true
-            streamConfig.sampleRate = config.sampleRate
-            streamConfig.channelCount = config.channels
+            streamConfig.sampleRate = 48_000
+            streamConfig.channelCount = 2
 
             let delegate = AudioStreamDelegate(chunkWriter: chunkWriter!)
+            self.scAudioDelegate = delegate
             scStream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
-            try scStream?.addStreamOutput(delegate, type: .audio, sampleHandlerQueue: .global(qos: .userInitiated))
+            try scStream?.addStreamOutput(delegate, type: .audio, sampleHandlerQueue: DispatchQueue(label: "meetingscribe.sc.audio"))
             try await scStream?.startCapture()
             log("SCStream remote capture started")
         } catch {
@@ -54,21 +56,16 @@ class AudioCapture {
         do {
             audioEngine = AVAudioEngine()
             let inputNode = audioEngine!.inputNode
-            let hwFormat = inputNode.inputFormat(forBus: 0)
-            log("Mic hardware format: \(hwFormat.sampleRate)Hz, \(hwFormat.channelCount)ch, \(hwFormat.commonFormat.rawValue)")
+            let nativeMicFormat = inputNode.outputFormat(forBus: 0)
+            log("Mic native format: \(nativeMicFormat.sampleRate)Hz, \(nativeMicFormat.channelCount)ch")
+            chunkWriter?.configureLocalInputFormat(nativeMicFormat)
 
-            // Use a standard recording format — 48kHz mono Float32
-            let recordFormat = AVAudioFormat(standardFormatWithSampleRate: 48000, channels: 1)!
-            chunkWriter?.localSampleRate = 48000
-            log("Recording format: \(recordFormat.sampleRate)Hz, \(recordFormat.channelCount)ch")
-
-            // Pass nil as format to get the native hardware format in the tap,
-            // then convert to our recording format
-            inputNode.installTap(onBus: 0, bufferSize: 4096, format: recordFormat) { [weak self] buffer, time in
-                let machTime = mach_absolute_time()
-                self?.chunkWriter?.writeLocal(buffer: buffer, machTime: machTime)
+            // IMPORTANT: tap with nil format to get native hardware samples
+            inputNode.installTap(onBus: 0, bufferSize: 2048, format: nil) { [weak self] buffer, _ in
+                self?.chunkWriter?.writeLocal(buffer: buffer, machTime: mach_absolute_time())
             }
 
+            audioEngine?.prepare()
             try audioEngine?.start()
             log("AVAudioEngine mic capture started")
         } catch {
@@ -78,9 +75,12 @@ class AudioCapture {
 
     func stop() -> [ChunkWriter.ChunkInfo] {
         if let stream = scStream {
-            stream.stopCapture { _ in }
+            let sem = DispatchSemaphore(value: 0)
+            stream.stopCapture { _ in sem.signal() }
+            _ = sem.wait(timeout: .now() + 2.0)
         }
         scStream = nil
+        scAudioDelegate = nil
 
         if audioEngine?.isRunning == true {
             audioEngine?.inputNode.removeTap(onBus: 0)

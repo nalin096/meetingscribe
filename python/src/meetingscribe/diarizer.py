@@ -27,10 +27,7 @@ def _get_pipeline(hf_token: str) -> Pipeline:
 
 def diarize(audio_path: str | Path, hf_token: str) -> list[SpeakerSegment]:
     """Run speaker diarization on audio file."""
-    pipeline = Pipeline.from_pretrained(
-        "pyannote/speaker-diarization-3.1",
-        token=hf_token,
-    )
+    pipeline = _get_pipeline(hf_token)
     diarization = pipeline(str(audio_path))
     segments = []
     for turn, _, speaker in diarization.itertracks(yield_label=True):
