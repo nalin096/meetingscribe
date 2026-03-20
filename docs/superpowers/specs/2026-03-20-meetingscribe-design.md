@@ -18,7 +18,7 @@ Two components communicating via a shared directory (`~/.meetingscribe/recording
 
 **Detection — API Path:**
 - Use `SCShareableContent.current` to get all shareable content (apps, windows)
-- Filter `SCRunningApplication` list by `bundleIdentifier` against whitelist
+- Filter `SCRunningApplication` list by `bundleIdentifier` against whitelist (`zoom.us`, `com.google.Chrome`, `com.tinyspeck.slackmacgap`)
 - For each matched app, check if it has an active audio stream via `SCStream` configuration with `capturesAudio = true`
 - Poll every 3 seconds (lightweight — no audio processing until a match triggers)
 
@@ -113,13 +113,13 @@ meeting_id.json          → pending (new, ready for processing)
 meeting_id.processing    → in_progress (Python has claimed it)
 meeting_id.done          → completed successfully
 meeting_id.failed        → failed (after max retries)
-meeting_id.failed.json   → contains error details and retry count
+meeting_id.failed.error  → contains error details and retry count
 ```
 
 - On startup, any `.processing` files are stale (previous crash) → reset to `.json` for retry
 - Python atomically renames `.json` → `.processing` before starting work (prevents duplicate processing if daemon restarts)
 - On success: rename to `.done`, move WAVs per retention policy
-- On failure: increment retry count, rename back to `.json` for retry. After 3 failures → rename to `.failed`, write error details to `.failed.json`, log a warning.
+- On failure: increment retry count, rename back to `.json` for retry. After 3 failures → rename to `.failed`, write error details to `.failed.error`, log a warning.
 - A manifest stuck in `.failed` requires manual intervention (fix the issue, rename to `.json` to retry)
 
 **Pipeline (sequential per meeting):**
@@ -129,7 +129,7 @@ meeting_id.failed.json   → contains error details and retry count
 3. **Diarize** — `pyannote-audio` speaker diarization. Labels segments with speaker IDs.
 4. **Align** — merge Whisper timestamps with pyannote speaker labels for speaker-attributed transcript. Consult `~/.meetingscribe/speakers.toml` to map speaker embeddings to known names (see Speaker Identity below).
 5. **Summarize** — pipe transcript to `claude -p --model sonnet` with prompt template. Transcript chunking for long meetings: split at speaker-turn boundaries into ~10k-word sections (conservative estimate ≈ ~13k tokens), summarize each, then produce a final merged summary. Prompt template stored in `~/.meetingscribe/prompt.md` (user-editable).
-6. **Write to vault** — generate markdown with YAML frontmatter, save to Obsidian vault. Validate vault path exists and is writable before writing; if not, log error and keep manifest in `.processing` for retry.
+6. **Write to vault** — generate markdown with YAML frontmatter, save to Obsidian vault. Validate vault path exists and is writable before writing; if not, log error and rename manifest back to `.json` for retry (consistent with state machine).
 
 **Speaker Identity Persistence:**
 
@@ -264,7 +264,7 @@ path = "~/ObsidianVault/Meetings"
 timezone = "America/Los_Angeles"
 
 [detection]
-apps = ["zoom.us", "Google Chrome", "Slack"]
+apps = ["zoom.us", "com.google.Chrome", "com.tinyspeck.slackmacgap"]
 chrome_window_match = "Meet -|meet.google.com"
 slack_min_duration_seconds = 30
 poll_interval_seconds = 3
