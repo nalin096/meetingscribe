@@ -173,12 +173,9 @@ class ChunkWriter {
         patchWavHeaderIfNeeded(outputDir.appendingPathComponent(remoteName))
         patchWavHeaderIfNeeded(outputDir.appendingPathComponent(localName))
 
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
         chunks.append(ChunkInfo(
             remote: remoteName, local: localName,
-            startMachTime: chunkStartMach, startISO: iso.string(from: startTime)
+            startMachTime: chunkStartMach, startISO: Constants.isoFormatter.string(from: startTime)
         ))
     }
 

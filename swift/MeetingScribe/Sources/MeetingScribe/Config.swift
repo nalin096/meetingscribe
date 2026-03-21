@@ -12,6 +12,12 @@ struct AppConfig {
     let chunkDurationSeconds: Int
     let chunkOverlapSeconds: Int
 
+    static let defaultFallback = AppConfig(
+        apps: [], chromeWindowMatch: "Meet -|meet.google.com", slackMinDurationSeconds: 30,
+        pollIntervalSeconds: 3, sampleRate: 16000, channels: 1,
+        bitDepth: 16, chunkDurationSeconds: 300, chunkOverlapSeconds: 1
+    )
+
     static func load(from path: URL = Constants.configPath) throws -> AppConfig {
         let data = try String(contentsOf: path, encoding: .utf8)
         let table = try TOMLTable(string: data)

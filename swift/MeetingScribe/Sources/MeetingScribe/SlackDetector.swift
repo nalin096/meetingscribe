@@ -13,7 +13,7 @@ class SlackDetector: MeetingDetector {
 
     func isActive(apps: [SCRunningApplication]) -> Bool {
         if !apps.isEmpty {
-            let slackRunning = apps.contains { $0.bundleIdentifier == "com.tinyspeck.slackmacgap" }
+            let slackRunning = apps.contains { $0.bundleIdentifier == Constants.BundleID.slack }
             guard slackRunning else {
                 audioStartTime = nil
                 return false

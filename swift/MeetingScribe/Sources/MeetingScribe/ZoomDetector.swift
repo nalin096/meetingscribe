@@ -7,7 +7,7 @@ struct ZoomDetector: MeetingDetector {
     func isActive(apps: [SCRunningApplication]) -> Bool {
         // If SCK apps available, check there first. Otherwise fall through to pgrep.
         if !apps.isEmpty {
-            let zoomRunning = apps.contains { $0.bundleIdentifier == "zoom.us" }
+            let zoomRunning = apps.contains { $0.bundleIdentifier == Constants.BundleID.zoom }
             guard zoomRunning else { return false }
         }
 

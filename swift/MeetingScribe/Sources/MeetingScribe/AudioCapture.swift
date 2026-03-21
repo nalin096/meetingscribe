@@ -26,12 +26,12 @@ class AudioCapture {
         do {
             let appWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == app.bundleIdentifier }
             guard let display = content.displays.first else {
-                log("No display found — skipping remote audio capture")
+                Log.debug("No display found — skipping remote audio capture", prefix: "AUDIO")
                 throw CaptureError.noDisplay
             }
 
             guard !appWindows.isEmpty else {
-                log("No windows found for \(app.bundleIdentifier) — skipping remote capture")
+                Log.debug("No windows found for \(app.bundleIdentifier) — skipping remote capture", prefix: "AUDIO")
                 throw CaptureError.appNotFound
             }
 
@@ -46,9 +46,9 @@ class AudioCapture {
             scStream = SCStream(filter: filter, configuration: streamConfig, delegate: nil)
             try scStream?.addStreamOutput(delegate, type: .audio, sampleHandlerQueue: DispatchQueue(label: "meetingscribe.sc.audio"))
             try await scStream?.startCapture()
-            log("SCStream remote capture started")
+            Log.debug("SCStream remote capture started", prefix: "AUDIO")
         } catch {
-            log("SCStream setup failed (continuing with mic only): \(error)")
+            Log.debug("SCStream setup failed (continuing with mic only): \(error)", prefix: "AUDIO")
             // Don't rethrow — still capture local mic
         }
 
@@ -57,7 +57,7 @@ class AudioCapture {
             audioEngine = AVAudioEngine()
             let inputNode = audioEngine!.inputNode
             let nativeMicFormat = inputNode.outputFormat(forBus: 0)
-            log("Mic native format: \(nativeMicFormat.sampleRate)Hz, \(nativeMicFormat.channelCount)ch")
+            Log.debug("Mic native format: \(nativeMicFormat.sampleRate)Hz, \(nativeMicFormat.channelCount)ch", prefix: "AUDIO")
             chunkWriter?.configureLocalInputFormat(nativeMicFormat)
 
             // IMPORTANT: tap with nil format to get native hardware samples
@@ -67,9 +67,9 @@ class AudioCapture {
 
             audioEngine?.prepare()
             try audioEngine?.start()
-            log("AVAudioEngine mic capture started")
+            Log.debug("AVAudioEngine mic capture started", prefix: "AUDIO")
         } catch {
-            log("AVAudioEngine failed: \(error)")
+            Log.debug("AVAudioEngine failed: \(error)", prefix: "AUDIO")
         }
     }
 
@@ -89,19 +89,6 @@ class AudioCapture {
         audioEngine = nil
 
         return chunkWriter?.finalize() ?? []
-    }
-
-    private func log(_ message: String) {
-        let logFile = Constants.meetingScribeDir.appendingPathComponent("debug.log")
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "[AUDIO \(timestamp)] \(message)\n"
-        if let handle = try? FileHandle(forWritingTo: logFile) {
-            handle.seekToEndOfFile()
-            handle.write(line.data(using: .utf8)!)
-            handle.closeFile()
-        } else {
-            try? line.write(to: logFile, atomically: true, encoding: .utf8)
-        }
     }
 
     enum CaptureError: Error {

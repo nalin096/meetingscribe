@@ -38,11 +38,7 @@ class AppState: ObservableObject {
     }
 
     func startMonitoring() {
-        let config = (try? AppConfig.load()) ?? AppConfig(
-            apps: [], chromeWindowMatch: "Meet -|meet.google.com", slackMinDurationSeconds: 30,
-            pollIntervalSeconds: 3, sampleRate: 16000, channels: 1,
-            bitDepth: 16, chunkDurationSeconds: 300, chunkOverlapSeconds: 1
-        )
+        let config = (try? AppConfig.load()) ?? .defaultFallback
 
         systemEvents = SystemEvents()
         systemEvents?.onSleep = { [weak self] in
@@ -75,9 +71,9 @@ class AppState: ObservableObject {
 
     /// Map detector app names to bundle identifiers for audio capture
     private static let appToBundleID: [String: String] = [
-        "Google Meet": "com.google.Chrome",
-        "Zoom": "zoom.us",
-        "Slack Huddle": "com.tinyspeck.slackmacgap",
+        "Google Meet": Constants.BundleID.chrome,
+        "Zoom": Constants.BundleID.zoom,
+        "Slack Huddle": Constants.BundleID.slack,
     ]
 
     private func handleMeetingDetected(app: String, config: AppConfig) {
@@ -102,31 +98,18 @@ class AppState: ObservableObject {
                 let content = try await SCShareableContent.current
                 if let scApp = content.applications.first(where: { $0.bundleIdentifier == bundleID }) {
                     try await audioCapture?.start(for: scApp, content: content)
-                    debugLog("Audio capture started for \(bundleID)")
+                    Log.debug("Audio capture started for \(bundleID)", prefix: "APP")
                 } else {
-                    debugLog("App '\(bundleID)' not found in SCShareableContent — starting mic-only capture")
+                    Log.debug("App '\(bundleID)' not found in SCShareableContent — starting mic-only capture", prefix: "APP")
                     // Start mic-only capture by passing a dummy app
                     try await audioCapture?.start(for: content.applications.first!, content: content)
                 }
             } catch {
-                debugLog("Audio capture setup error (non-fatal): \(error)")
+                Log.debug("Audio capture setup error (non-fatal): \(error)", prefix: "APP")
             }
         }
 
         startRecording(app: app)
-    }
-
-    private func debugLog(_ message: String) {
-        let logFile = Constants.meetingScribeDir.appendingPathComponent("debug.log")
-        let timestamp = ISO8601DateFormatter().string(from: Date())
-        let line = "[\(timestamp)] \(message)\n"
-        if let handle = try? FileHandle(forWritingTo: logFile) {
-            handle.seekToEndOfFile()
-            handle.write(line.data(using: .utf8)!)
-            handle.closeFile()
-        } else {
-            try? line.write(to: logFile, atomically: true, encoding: .utf8)
-        }
     }
 
     private func handleMeetingEnded() {
@@ -191,11 +174,7 @@ class AppState: ObservableObject {
         // Stop current, start new for altApp
         discardRecording()
 
-        let config = (try? AppConfig.load()) ?? AppConfig(
-            apps: [], chromeWindowMatch: "Meet -|meet.google.com", slackMinDurationSeconds: 30,
-            pollIntervalSeconds: 3, sampleRate: 16000, channels: 1,
-            bitDepth: 16, chunkDurationSeconds: 300, chunkOverlapSeconds: 1
-        )
+        let config = (try? AppConfig.load()) ?? .defaultFallback
         handleMeetingDetected(app: altApp, config: config)
     }
 }

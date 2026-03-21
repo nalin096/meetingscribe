@@ -7,11 +7,13 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+SECONDS_PER_DAY = 86400
+
 
 def cleanup_processed_wavs(directory: Path, retain_days: int) -> None:
     """Delete WAV files. If retain_days > 0, only delete files older than that."""
     if retain_days > 0:
-        cutoff = time.time() - (retain_days * 86400)
+        cutoff = time.time() - (retain_days * SECONDS_PER_DAY)
         for wav in directory.glob("*.wav"):
             if wav.stat().st_mtime < cutoff:
                 wav.unlink()
@@ -24,7 +26,7 @@ def cleanup_processed_wavs(directory: Path, retain_days: int) -> None:
 
 def cleanup_orphans(directory: Path, max_age_days: int = 7) -> None:
     """Remove WAV chunks older than max_age_days."""
-    cutoff = time.time() - (max_age_days * 86400)
+    cutoff = time.time() - (max_age_days * SECONDS_PER_DAY)
     for wav in directory.glob("*.wav"):
         if wav.stat().st_mtime < cutoff:
             wav.unlink()

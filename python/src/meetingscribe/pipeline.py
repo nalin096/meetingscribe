@@ -4,6 +4,8 @@ import logging
 from datetime import datetime
 from pathlib import Path
 
+import numpy as np
+import soundfile as sf
 import keyring
 
 from meetingscribe.audio_merger import merge_chunk_pair, concatenate_chunks, fix_wav_header
@@ -51,7 +53,6 @@ def process_meeting(manifest: Manifest, recordings_dir: Path, config: MeetingScr
             fix_wav_header(local_path)
 
         # Check actual sample count, not file size
-        import soundfile as sf
         remote_samples = 0
         local_samples = 0
         if remote_path.exists():
@@ -80,16 +81,14 @@ def process_meeting(manifest: Manifest, recordings_dir: Path, config: MeetingScr
 
     # Normalize audio level — mic capture can be very quiet
     if full_audio.exists() and full_audio.stat().st_size > 100:
-        import soundfile as _sf
-        import numpy as _np
-        _data, _sr = _sf.read(str(full_audio), dtype="float32")
-        if len(_data) > 0:
-            peak = _np.max(_np.abs(_data))
+        data, sr = sf.read(str(full_audio), dtype="float32")
+        if len(data) > 0:
+            peak = np.max(np.abs(data))
             if 0 < peak < 0.8:
                 gain = 0.9 / peak  # normalize to 0.9 peak
                 logger.info(f"Audio quiet (peak={peak:.4f}), boosting {gain:.1f}x")
-                _data = _np.clip(_data * gain, -1.0, 1.0)
-                _sf.write(str(full_audio), _data, _sr, subtype="PCM_16")
+                data = np.clip(data * gain, -1.0, 1.0)
+                sf.write(str(full_audio), data, sr, subtype="PCM_16")
 
     # Step 2: Transcribe
     audio_file = full_audio if full_audio.exists() and full_audio.stat().st_size > 100 else None

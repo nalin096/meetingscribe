@@ -80,7 +80,7 @@ def fail_manifest(path: Path, error: str, retry_count: int, max_retries: int) ->
         if path.exists():
             try:
                 data = json.loads(path.read_text())
-            except (json.JSONDecodeError, ValueError):
+            except json.JSONDecodeError:
                 pass
         data["_retry_count"] = retry_count + 1
         path.write_text(json.dumps(data, indent=2))

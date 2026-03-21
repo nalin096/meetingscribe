@@ -2,9 +2,6 @@ import Foundation
 
 struct ManifestWriter {
     static func write(meetingID: String, app: String, chunks: [ChunkWriter.ChunkInfo], started: Date, ended: Date, to directory: URL) {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
         let chunkDicts: [[String: Any]] = chunks.map { chunk in
             ["remote": chunk.remote, "local": chunk.local,
              "start_mach_time": chunk.startMachTime, "start_iso": chunk.startISO]
@@ -12,7 +9,7 @@ struct ManifestWriter {
 
         let manifest: [String: Any] = [
             "meeting_id": meetingID, "app": app, "chunks": chunkDicts,
-            "started": iso.string(from: started), "ended": iso.string(from: ended),
+            "started": Constants.isoFormatter.string(from: started), "ended": Constants.isoFormatter.string(from: ended),
         ]
 
         guard let jsonData = try? JSONSerialization.data(withJSONObject: manifest, options: .prettyPrinted) else { return }
