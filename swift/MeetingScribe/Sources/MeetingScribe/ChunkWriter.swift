@@ -17,6 +17,7 @@ class ChunkWriter {
     private var currentRemoteFile: AVAudioFile?
     private var currentLocalFile: AVAudioFile?
     var localSampleRate: Double = 48000
+    private(set) var lastAudioWriteTime: Date = Date()
     private var chunkStartTime: Date?
     private var chunkStartMach: UInt64 = 0
     private var samplesWritten = 0
@@ -64,6 +65,7 @@ class ChunkWriter {
                 try? remoteFile.write(from: pcm)
                 samplesWritten += Int(pcm.frameLength)
             }
+            lastAudioWriteTime = Date()
         }
     }
 
@@ -132,9 +134,11 @@ class ChunkWriter {
                 }
                 if error == nil && converted.frameLength > 0 {
                     try? file.write(from: converted)
+                    lastAudioWriteTime = Date()
                 }
             } else {
                 try? file.write(from: buffer)
+                lastAudioWriteTime = Date()
             }
         }
     }
