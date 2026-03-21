@@ -46,6 +46,7 @@ model = "large-v3"
 [diarization]
 keychain_service = "meetingscribe"
 keychain_account = "hf_token"
+speaker_similarity_threshold = 0.75
 
 [summary]
 cli = "claude"

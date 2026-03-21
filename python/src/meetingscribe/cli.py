@@ -1,10 +1,14 @@
 """CLI entry point for MeetingScribe."""
 
 import argparse
+import json
 import logging
 import subprocess
 import sys
 from pathlib import Path
+
+import yaml
+from meetingscribe.speakers import upsert_speaker
 
 MEETINGSCRIBE_DIR = Path("~/.meetingscribe").expanduser()
 
@@ -17,6 +21,7 @@ def setup_command() -> None:
     MEETINGSCRIBE_DIR.mkdir(exist_ok=True)
     (MEETINGSCRIBE_DIR / "recordings").mkdir(exist_ok=True)
     (MEETINGSCRIBE_DIR / "logs").mkdir(exist_ok=True)
+    (MEETINGSCRIBE_DIR / "embeddings").mkdir(exist_ok=True)
 
     vault_path = input("Obsidian vault meetings folder path: ").strip()
     vault_path = Path(vault_path).expanduser()
@@ -73,6 +78,7 @@ model = "large-v3"
 [diarization]
 keychain_service = "meetingscribe"
 keychain_account = "hf_token"
+speaker_similarity_threshold = 0.75
 
 [summary]
 cli = "claude"
@@ -154,13 +160,92 @@ def run_daemon_command() -> None:
     run_daemon(config)
 
 
+def _load_config_for_cli():
+    from meetingscribe.config import load_config
+    config_path = MEETINGSCRIBE_DIR / "config.toml"
+    if not config_path.exists():
+        print("No config found. Run 'meetingscribe setup' first.")
+        sys.exit(1)
+    return load_config(config_path)
+
+
+def learn_speakers_command() -> None:
+    """Scan vault notes for labeled speaker_map entries and update the speaker DB.
+
+    Note: do not run while the meetingscribe daemon is active.
+    """
+    from meetingscribe.pipeline import _safe_filename
+    import numpy as np
+
+    config = _load_config_for_cli()
+    embeddings_dir = MEETINGSCRIBE_DIR / "embeddings"
+
+    learned = 0
+    meetings_processed = 0
+
+    for md_path in sorted(config.vault.path.glob("*.md")):
+        try:
+            content = md_path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        if not content.startswith("---"):
+            continue
+        end = content.find("---", 3)
+        if end == -1:
+            continue
+        try:
+            frontmatter = yaml.safe_load(content[3:end])
+        except yaml.YAMLError:
+            continue
+        if not frontmatter:
+            continue
+
+        meeting_id = frontmatter.get("meeting_id")
+        speaker_map = frontmatter.get("speaker_map") or {}
+        if not meeting_id or not speaker_map:
+            continue
+
+        filled = {k: str(v).strip() for k, v in speaker_map.items() if v and str(v).strip()}
+        if not filled:
+            continue
+
+        safe = _safe_filename(str(meeting_id))
+        sidecar_path = embeddings_dir / f"{safe}.json"
+        npz_path = embeddings_dir / f"{safe}.npz"
+        if not sidecar_path.exists() or not npz_path.exists():
+            print(f"  Warning: no embeddings for {meeting_id}, skipping")
+            continue
+
+        try:
+            friendly_to_raw = json.loads(sidecar_path.read_text(encoding="utf-8"))
+            npz_data = np.load(str(npz_path))
+        except Exception as e:
+            print(f"  Warning: could not load embeddings for {meeting_id}: {e}")
+            continue
+
+        for friendly_label, name in filled.items():
+            raw_label = friendly_to_raw.get(friendly_label)
+            if raw_label is None or raw_label not in npz_data:
+                continue
+            upsert_speaker(name, npz_data[raw_label])
+            learned += 1
+
+        meetings_processed += 1
+
+    if learned == 0:
+        print("No labeled speakers found.")
+    else:
+        noun = "speaker" if learned == 1 else "speakers"
+        print(f"Learned {learned} {noun} from {meetings_processed} meeting{'s' if meetings_processed != 1 else ''}.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="meetingscribe")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("setup", help="Run first-time setup wizard")
     sub.add_parser("daemon", help="Start the processing daemon")
     sub.add_parser("install", help="Install LaunchAgent and start daemon at login")
-    sub.add_parser("label-speaker", help="Label speakers in meeting notes (v2)")
+    sub.add_parser("learn-speakers", help="Learn speaker identities from labeled vault notes (do not run while daemon is active)")
     args = parser.parse_args()
 
     if args.command == "setup":
@@ -169,7 +254,7 @@ def main() -> None:
         run_daemon_command()
     elif args.command == "install":
         install_command()
-    elif args.command == "label-speaker":
-        print("Speaker labeling will be available in v2.")
+    elif args.command == "learn-speakers":
+        learn_speakers_command()
     else:
         parser.print_help()

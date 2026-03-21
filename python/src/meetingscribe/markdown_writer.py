@@ -15,6 +15,7 @@ class MeetingMetadata:
     speakers: int
     speaker_map: dict[str, str] = field(default_factory=dict)
     topics: list[str] = field(default_factory=list)
+    meeting_id: str = ""
 
 
 def _format_timestamp(seconds: float) -> str:
@@ -54,6 +55,7 @@ time: "{meta.time}"
 timezone: "{meta.timezone}"
 duration_min: {meta.duration_min}
 app: {meta.app}
+meeting_id: {meta.meeting_id}
 speakers: {meta.speakers}
 speaker_map:
 {speaker_map_yaml.rstrip()}
