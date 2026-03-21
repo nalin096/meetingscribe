@@ -17,11 +17,18 @@ struct MeetDetector: MeetingDetector {
             return false
         }
 
+        // Patterns that indicate the meeting ended (post-call screen)
+        let endedPatterns = ["You left the meeting", "Meeting ended", "Returning to home"]
+
         let patterns = windowMatch.split(separator: "|").map(String.init)
         for window in windowList {
             guard let owner = window[kCGWindowOwnerName as String] as? String,
                   owner == "Google Chrome",
                   let title = window[kCGWindowName as String] as? String else {
+                continue
+            }
+            // Skip if title indicates meeting has ended
+            if endedPatterns.contains(where: { title.contains($0) }) {
                 continue
             }
             for pattern in patterns {
