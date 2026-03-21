@@ -21,3 +21,8 @@ def test_load_config_missing_file():
     import pytest
     with pytest.raises(FileNotFoundError):
         load_config(Path("/nonexistent/config.toml"))
+
+
+def test_diarization_config_has_similarity_threshold(sample_config):
+    config = load_config(sample_config)
+    assert config.diarization.speaker_similarity_threshold == 0.75
