@@ -21,9 +21,8 @@ Auto-detects Zoom, Google Meet, and Slack Huddle meetings, records system audio,
 ## 1. Build and install the Swift recorder app
 
 ```bash
-cd swift/MeetingScribe
-./scripts/build-app.sh
-cp -r build/MeetingScribe.app ~/Applications/
+swift/MeetingScribe/scripts/build-app.sh
+cp -r swift/MeetingScribe/build/MeetingScribe.app ~/Applications/
 open ~/Applications/MeetingScribe.app
 ```
 
