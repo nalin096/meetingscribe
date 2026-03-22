@@ -201,11 +201,26 @@ def learn_speakers_command() -> None:
             continue
 
         meeting_id = frontmatter.get("meeting_id")
-        speaker_map = frontmatter.get("speaker_map") or {}
-        if not meeting_id or not speaker_map:
+        speaker_map_raw = frontmatter.get("speaker_map") or {}
+        if not meeting_id or not speaker_map_raw:
             continue
 
-        filled = {k: str(v).strip() for k, v in speaker_map.items() if v and str(v).strip()}
+        # Normalize speaker_map to dict regardless of YAML/Obsidian storage format
+        speaker_map = {}
+        if isinstance(speaker_map_raw, dict):
+            speaker_map = speaker_map_raw
+        elif isinstance(speaker_map_raw, list):
+            for item in speaker_map_raw:
+                if isinstance(item, str) and ": " in item:
+                    k, _, v = item.partition(": ")
+                    speaker_map[k.strip()] = v.strip()
+                elif isinstance(item, dict):
+                    speaker_map.update(item)
+        elif isinstance(speaker_map_raw, str) and ": " in speaker_map_raw:
+            k, _, v = speaker_map_raw.partition(": ")
+            speaker_map[k.strip()] = v.strip()
+
+        filled = {k: v for k, v in speaker_map.items() if v}
         if not filled:
             continue
 

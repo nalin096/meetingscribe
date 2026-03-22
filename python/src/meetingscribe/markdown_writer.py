@@ -44,9 +44,9 @@ def write_meeting_note(
 ) -> None:
     """Write a meeting note in Obsidian markdown format."""
     status = _determine_status(segments, summary)
-    speaker_map_yaml = ""
-    for k, v in meta.speaker_map.items():
-        speaker_map_yaml += f'  {k}: "{v}"\n'
+    speaker_map_yaml = "\n".join(
+        f'  - "{k}: {v}"' for k, v in meta.speaker_map.items()
+    ) or "  []"
     topics_yaml = str(meta.topics) if meta.topics else "[]"
 
     frontmatter = f"""---
@@ -58,7 +58,7 @@ app: {meta.app}
 meeting_id: {meta.meeting_id}
 speakers: {meta.speakers}
 speaker_map:
-{speaker_map_yaml.rstrip()}
+{speaker_map_yaml}
 topics: {topics_yaml}
 tags: [meeting]
 status: {status}

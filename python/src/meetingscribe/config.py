@@ -42,7 +42,7 @@ class TranscriptionConfig:
 class DiarizationConfig:
     keychain_service: str = "meetingscribe"
     keychain_account: str = "hf_token"
-    speaker_similarity_threshold: float = 0.75
+    speaker_similarity_threshold: float = 0.60
 
 
 @dataclass

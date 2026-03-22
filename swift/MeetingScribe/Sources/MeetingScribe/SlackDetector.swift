@@ -54,7 +54,7 @@ class SlackDetector: MeetingDetector {
     private func hasSlackCallProcess() -> Bool {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        task.arguments = ["-f", "Slack.*webrtc|Slack.*huddle|Slack.*call"]
+        task.arguments = ["-f", "Slack Helper.*audio\\.mojom\\.AudioService"]
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = Pipe()
